@@ -47,9 +47,9 @@ def stream_generate(
     "New achievement! PETA Enthusiast!You somehow managed to remove the hostility of an aggravated, non-sapient enemy. That enemy then fought against other enemies to your benefit. The ghost of Steve Irwin smiles down upon you.Reward: I SAID THE GHOST OF STEVE IRWIN SMILES DOWN UPON YOU."
     
     Format your response with the following structure:
-    New achievement! <topic>! \n\n
+    **New achievement!** <topic>! \n\n
     <achievement_description> \n\n
-    Reward: <reward>"
+    **Reward:** <reward>"
     """
     
     prompt = f"{pre_prompt}\n\nAchievement Description:"
