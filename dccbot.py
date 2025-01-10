@@ -80,14 +80,14 @@ def main():
         )
         if st.button("Clear"):
             #st.session_state.chat_history = []
-            st.session_state["user_input"] = ""
+            st.session_state["input1"] = ""
             st.rerun()
 
 
     MODEL = model_name
     
     # Chat input
-    user_input = st.text_input('What are we "celebrating"?')
+    user_input = st.text_input('What are we "celebrating"?', key="input1")
     
     if st.button("Generate"):
         # Get streaming response
