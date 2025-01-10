@@ -1,18 +1,4 @@
-# Gemini & Imagen Explorer 🚀
-
-An interactive Streamlit application showcasing the capabilities of Google Cloud's Gemini and Imagen AI models. This app demonstrates multimodal understanding, text generation, and image generation features through an intuitive interface.
-
-## Features
-
-### Gemini Pro Features
-- Multi-turn conversations with context awareness
-- Code generation and explanation
-- Document analysis and summarization
-- Multimodal inputs (text + images) for rich understanding
-- Custom system prompts for specialized tasks
-
-### Imagen Features
-- Text-to-image generation
+## Dungeon Crawler Carl Achievement Generator
 
 ## Getting Started
 
@@ -25,8 +11,8 @@ An interactive Streamlit application showcasing the capabilities of Google Cloud
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/goodrules/gemini-streamlit-app
-cd gemini-streamlit-app
+git clone https://github.com/goodrules/dcc-generator-app
+cd dcc-generator-app
 ```
 
 2. Create and activate a virtual environment:
@@ -43,6 +29,8 @@ pip install -r requirements.txt
 4. Set up your Google Cloud credentials:
 ```bash
 export GOOGLE_APPLICATION_CREDENTIALS="path/to/your/credentials.json"
+OR
+export AISTUDIO_API_KEY="your_api_key"
 ```
 
 ### Running the App
