@@ -86,7 +86,7 @@ def main():
     MODEL = model_name
     
     # Chat input
-    user_input = st.text_input("Type your message here...")
+    user_input = st.text_input('What are we "celebrating"?')
     
     if st.button("Generate"):
         # Get streaming response
