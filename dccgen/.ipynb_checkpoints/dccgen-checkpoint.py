@@ -126,7 +126,7 @@ with st.sidebar:
     )
     if st.button("Clear"):
         #st.session_state.chat_history = []
-        st.session_state["input1"] = ""
+        st.session_state["user_input"] = ""
         st.rerun()
 
 
