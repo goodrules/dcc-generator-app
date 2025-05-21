@@ -1,0 +1,6 @@
+flask==2.3.3
+slack-bolt==1.18.0
+python-dotenv==1.0.0
+gunicorn==21.2.0
+google-cloud-aiplatform>=1.36.0
+google-genai>=0.3.0

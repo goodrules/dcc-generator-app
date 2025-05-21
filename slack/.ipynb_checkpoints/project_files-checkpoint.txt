@@ -1,0 +1,48 @@
+# requirements.txt
+flask==2.3.3
+slack-bolt==1.18.0
+python-dotenv==1.0.0
+gunicorn==21.2.0
+google-cloud-aiplatform>=1.36.0
+google-genai>=0.3.0
+
+# .env (create this file locally, don't commit to version control)
+SLACK_BOT_TOKEN=xoxb-295749027142-8290931599089-5tck9O7bpe1gqpctzZTB4xOD
+SLACK_SIGNING_SECRET=d569a2468439135b4f7572fc1931ac0a
+PORT=8080
+PROJECT_ID=your-gcp-project-id
+GEMINI_MODEL=gemini-2.0-flash-001
+IMAGEN_MODEL=imagen-3.0-fast-generate-001
+GENERATE_IMAGES=false
+
+# Dockerfile (for Cloud Run deployment)
+FROM python:3.10-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 app:flask_app
+
+# .gitignore
+.env
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.idea/
+.vscode/
+
+# Build your container image using Cloud Build
+gcloud builds submit --tag gcr.io/mg-ce-demos/dcc-slack-app
+
+# Deploy the image to Cloud Run
+gcloud run deploy dcc-slack-app \
+  --image gcr.io/mg-ce-demos/dcc-slack-app \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars="SLACK_BOT_TOKEN=xoxb-your-token,SLACK_SIGNING_SECRET=your-secret,PROJECT_ID=your-project-id,GEMINI_MODEL=gemini-2.0-flash-001"
