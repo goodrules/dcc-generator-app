@@ -5,5 +5,3 @@ COPY . .
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 CMD streamlit run --server.port 8080 --server.enableCORS false app.py 
-#ENV AISTUDIO_API_KEY="AIzaSyBjTNlHKtMNrHAPwhf5B2wa81YCyripOYA"
-ENV PROJECT_ID="mg-ce-demos"
