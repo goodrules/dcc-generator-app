@@ -81,19 +81,40 @@ def stream_generate(
     random_examples = get_random_examples(6)
     examples_text = "\n    ".join(random_examples)
     
-    pre_prompt = f"""Write a funny achievement description for the following topic in the Dungeon Crawler Carl style.  Achievements should vary in length, complexity, silliness, and vulgarity.  Only generate 1 achievement.  The reward should be a type of Box or .
-    
-    Topic: {query}
+    pre_prompt = f"""You are the sarcastic, judgmental System AI from Dungeon Crawler Carl. Generate a hilariously inappropriate achievement for the following topic. 
 
-    ACHIEVEMENT EXAMPLES:
-    {examples_text}    
-    FORMAT YOUR RESPONSE WITH THE FOLLOWING STRUCTURE:
-    **New achievement!** <topic>! \n\n
-    <achievement_description> \n\n
-    **Reward:** <reward>"
-    """
+CRITICAL STYLE REQUIREMENTS:
+- Adopt a sarcastic, sometimes angry/frustrated AI voice that judges the player
+- Break the fourth wall: reference gaming mechanics, real world, the player's actual life
+- Use dark humor that inappropriately connects game actions to real-world moral issues
+- Address the player as "you" - NEVER call them "Carl"
+- Make creative personal attacks on the player's character, choices, family, or mental state
+- Reference pop culture, social commentary, and real-world comparisons inappropriately
+- Vary wildly in length and emotional tone (angry rants, short dismissals, disappointed lectures)
+- Use profanity, adult references, and mature themes naturally within the dark humor
+- Subvert typical gaming achievement expectations with meta-commentary
+
+REWARD REQUIREMENTS:
+- Create themed "Box" rewards that match the achievement tone
+- Examples: "Bronze Asshole's Box", "Gold Makeup Sex is the Best Sex box", "Platinum War Criminal's Box"
+- Sometimes deny rewards entirely for truly awful behavior
+- Be creative and thematic with reward names
+
+Topic: {query}
+
+ACHIEVEMENT EXAMPLES:
+{examples_text}
+
+Generate exactly 1 achievement that captures this chaotic, inappropriate, hilarious tone.
+
+FORMAT:
+**New achievement!** <creative_title>! 
+
+<achievement_description>
+
+**Reward:** <creative_reward_or_denial>"""
     
-    prompt = f"{pre_prompt}\n\nAchievement Description:"
+    prompt = pre_prompt
     
     contents = [
         types.Content(
@@ -107,7 +128,7 @@ def stream_generate(
     
     def generate_stream():
         for chunk in response:
-            if hasattr(chunk, "text"):
+            if hasattr(chunk, "text") and chunk.text and chunk.text.strip():
                 yield chunk.text
     
     return generate_stream(), prompt
@@ -212,35 +233,51 @@ if st.button("Generate"):
     # Initialize response variables
     full_response = ""
     
-    # Get streaming response and prompt
-    message_placeholder = st.empty()
-    stream_generator, achievement_prompt = stream_generate(query=user_input, model=MODEL)
-            
-    for chunk in stream_generator:
-        if chunk:  # Only concatenate if chunk is not None
-            full_response += chunk
-            message_placeholder.markdown(full_response + "▌")
-            time.sleep(0.05)
+    # Create dedicated container for achievement text
+    achievement_container = st.container()
     
-    # Update final response without cursor
-    message_placeholder.markdown(full_response)
-            
-    image_setup_prompt = f"""Extract key phrases and words from the following achievement, and create a prompt to generate an image that represents what was extracted. The focus should be on the reward.  The image generation prompt should be silly and ridiculous. Do not include any children in the image prompt. The output should only include the image generation prompt.
+    with achievement_container:
+        st.subheader("🏆 New Achievement Generated!")
+        message_placeholder = st.empty()
+        
+        # Get streaming response and prompt
+        stream_generator, achievement_prompt = stream_generate(query=user_input, model=MODEL)
+                
+        for chunk in stream_generator:
+            if chunk:  # Only concatenate if chunk is not None
+                full_response += chunk
+                message_placeholder.markdown(full_response + "▌")
+                time.sleep(0.05)
+        
+        # Update final response without cursor
+        message_placeholder.markdown(full_response)
+    
+    # Only proceed with image generation if we have achievement text
+    if full_response.strip():
+        st.markdown("---")
+        
+        image_setup_prompt = f"""Create a visual representation of the REWARD from this Dungeon Crawler Carl achievement. Focus primarily on the reward itself, using the achievement's dark humor, tone, and moral judgment to inform the visual style.
 
-    Achievement test: 
-    {full_response}
+VISUAL REQUIREMENTS:
+- Primary subject: The specific reward box/item mentioned in the achievement
+- Style: Gaming reward aesthetic with inappropriate/darkly humorous elements  
+- Tone: Maintain the achievement's sarcastic judgment and absurdity in visual form
+- Irony: Beautiful, appealing reward presentation of morally questionable contents
+- DCC Aesthetic: Post-apocalyptic gaming style with corporate cheerfulness applied to dark themes
+- Thematic consistency: Visual elements should match the achievement's context and moral theme
 
-    Image generation prompt:
-    """
+Achievement: {full_response}
 
-    with st.status("Generating reward..."):
-        st.write("Validating if crawler achieved the reward.")
-        image_prompt = retry_gemini(image_setup_prompt, MODEL, generate_content_config)
-        st.write("Digging through the digital junk drawer of slightly used rewards... Found it!")
-        response_image = retry_imagen(image_prompt, IMAGE_MODEL)
-        st.write("Slapping a new label on it.")
-        st.image(response_image.generated_images[0].image.image_bytes, caption=["Generated by Imagen 3"])
-        st.write("Reward deployed.")
+Generate a concise, specific image prompt focusing on the reward that captures its visual irony and DCC absurdity. Do not include children. Output only the image generation prompt:"""
+
+        with st.status("Generating reward..."):
+            st.write("Validating if crawler achieved the reward.")
+            image_prompt = retry_gemini(image_setup_prompt, MODEL, generate_content_config)
+            st.write("Digging through the digital junk drawer of slightly used rewards... Found it!")
+            response_image = retry_imagen(image_prompt, IMAGE_MODEL)
+            st.write("Slapping a new label on it.")
+            st.image(response_image.generated_images[0].image.image_bytes, caption=["Generated by Imagen 3"])
+            st.write("Reward deployed.")
     
     # Add debug info to sidebar
     with st.sidebar:
