@@ -9,33 +9,48 @@ import time
 import random
 import io
 
-#aistudio_key = os.getenv("AISTUDIO_API_KEY")  # google ai studio
+from dotenv import load_dotenv
 
-PROJECT_ID = os.environ.get("PROJECT_ID")
-LOCATION = "us-central1"
+# Load environment variables
+load_dotenv()
 
-google_genai_client = genai.Client(vertexai=True, project=PROJECT_ID, location=LOCATION)
-#google_genai_client = genai.Client(api_key=aistudio_key) # instantiate client
+# Initialize Client
+use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "true").lower() == "true"
+api_key = os.getenv("GOOGLE_API_KEY")
 
+if use_vertex:
+    # Auto-detects PROJECT, LOCATION from env
+    # User requested 'global' location for all models
+    google_genai_client = genai.Client(vertexai=True, location="global")
+else:
+    # Force Developer API (AI Studio)
+    if "GOOGLE_CLOUD_PROJECT" in os.environ:
+        del os.environ["GOOGLE_CLOUD_PROJECT"]
+    if "GOOGLE_CLOUD_LOCATION" in os.environ:
+        del os.environ["GOOGLE_CLOUD_LOCATION"]
+        
+    google_genai_client = genai.Client(api_key=api_key, vertexai=False)
+
+# Default config for general text generation (like prompt engineering)
 generate_content_config = types.GenerateContentConfig(
-        temperature = 1.5,
-        top_p = 0.95,
-        max_output_tokens = 8192,
-        response_modalities = ["TEXT"],
-        safety_settings = [types.SafetySetting(
-            category="HARM_CATEGORY_HATE_SPEECH",
-            threshold="OFF"
-        ),types.SafetySetting(
-            category="HARM_CATEGORY_DANGEROUS_CONTENT",
-            threshold="OFF"
-        ),types.SafetySetting(
-            category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
-            threshold="OFF"
-        ),types.SafetySetting(
-            category="HARM_CATEGORY_HARASSMENT",
-            threshold="OFF"
-        )]
-    )
+    temperature = 1,
+    top_p = 0.95,
+    max_output_tokens = 8192,
+    response_modalities = ["TEXT"],
+    safety_settings = [types.SafetySetting(
+        category="HARM_CATEGORY_HATE_SPEECH",
+        threshold="OFF"
+    ),types.SafetySetting(
+        category="HARM_CATEGORY_DANGEROUS_CONTENT",
+        threshold="OFF"
+    ),types.SafetySetting(
+        category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+        threshold="OFF"
+    ),types.SafetySetting(
+        category="HARM_CATEGORY_HARASSMENT",
+        threshold="OFF"
+    )]
+)
 
 # Built-in examples list
 DEFAULT_EXAMPLES = [
@@ -73,7 +88,8 @@ def get_random_examples(num_examples=6):
 
 def stream_generate(
     query: str, 
-    model="gemini-2.5-pro"
+    model="gemini-3-pro-preview",
+    thinking_level="HIGH"
 ) -> tuple[Iterator[str], str]:
     """Stream chat responses from Gemini and return the prompt used."""
     
@@ -123,13 +139,39 @@ FORMAT:
         )
     ]
     
+    # Configure generation
+    generate_content_config = types.GenerateContentConfig(
+        temperature = 1, # Always 1 for Gemini 3
+        top_p = 0.95,
+        max_output_tokens = 65535,
+        response_modalities = ["TEXT"],
+        safety_settings = [types.SafetySetting(
+            category="HARM_CATEGORY_HATE_SPEECH",
+            threshold="OFF"
+        ),types.SafetySetting(
+            category="HARM_CATEGORY_DANGEROUS_CONTENT",
+            threshold="OFF"
+        ),types.SafetySetting(
+            category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            threshold="OFF"
+        ),types.SafetySetting(
+            category="HARM_CATEGORY_HARASSMENT",
+            threshold="OFF"
+        )],
+        thinking_config=types.ThinkingConfig(
+            thinking_level=thinking_level,
+        ),
+    )
+
     # Get streaming response
     response = google_genai_client.models.generate_content_stream(model=model, contents=contents, config=generate_content_config)
     
     def generate_stream():
         for chunk in response:
-            if hasattr(chunk, "text") and chunk.text and chunk.text.strip():
-                yield chunk.text
+            if chunk.candidates and chunk.candidates[0].content and chunk.candidates[0].content.parts:
+                part_text = chunk.text
+                if part_text:
+                    yield part_text
     
     return generate_stream(), prompt
 
@@ -153,22 +195,59 @@ def retry_gemini(prompt, model_name, generation_config, retries = 3):
             print(f"Attempt {retry + 1} failed: {e}")
             time.sleep(0.5 * 2 ** retry)
 
-def retry_imagen(prompt, model_name, retries = 3):
+def generate_image(prompt, retries=3):
+    """Generates an image using Gemini 3 image model."""
+    model_name = "gemini-3-pro-image-preview"
+    
+    # Simple aspect ratio config for now, can be expanded
+    # The new API merges image generation into generate_content
+    generate_image_config = types.GenerateContentConfig(
+        temperature=1,
+        top_p=0.95,
+        max_output_tokens=32768,
+        response_modalities=["TEXT", "IMAGE"],
+        safety_settings=[types.SafetySetting(
+            category="HARM_CATEGORY_HATE_SPEECH",
+            threshold="OFF"
+        ),types.SafetySetting(
+            category="HARM_CATEGORY_DANGEROUS_CONTENT",
+            threshold="OFF"
+        ),types.SafetySetting(
+            category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+            threshold="OFF"
+        ),types.SafetySetting(
+            category="HARM_CATEGORY_HARASSMENT",
+            threshold="OFF"
+        )],
+    )
+
+    contents = [
+        types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=prompt)]
+        )
+    ]
+
     for retry in range(retries):
         try:
-            response_image = google_genai_client.models.generate_images(
+            response = google_genai_client.models.generate_content(
                 model=model_name,
-                prompt=prompt,
-                config=types.GenerateImagesConfig(
-                    number_of_images=1,
-                    include_rai_reason=True,
-                    person_generation="ALLOW_ALL"
-                )
+                contents=contents,
+                config=generate_image_config,
             )
-            return response_image
+            
+            if response.candidates and response.candidates[0].content.parts:
+                for part in response.candidates[0].content.parts:
+                    if part.inline_data and part.inline_data.data:
+                        return part.inline_data.data
+            
+            print(f"Attempt {retry + 1}: No image data found in response.")
+            return None
+            
         except Exception as e:
             print(f"Attempt {retry + 1} failed: {e}")
             time.sleep(0.5 * 2 ** retry)
+    return None
 
 st.title("DCC Achievement Generator")
 
@@ -176,14 +255,19 @@ st.title("DCC Achievement Generator")
 with st.sidebar:
     model_name = st.selectbox(
         "Select Gemini Model",
-        ["gemini-2.5-flash", "gemini-2.5-pro"],
+        ["gemini-3-pro-preview", "gemini-3-flash-preview"],
         index=0
     )
-    image_model_name = st.selectbox(
-        "Select Imagen Model",
-        ["imagen-4.0-generate-preview-06-06", "imagen-4.0-ultra-generate-preview-06-06", "imagen-4.0-fast-generate-preview-06-06"],
-        index=0
+    
+    thinking_level = st.select_slider(
+        "Thinking Budget",
+        options=["LOW", "HIGH"],
+        value="HIGH",
+        help="Controls the depth of reasoning for the model."
     )
+    
+    # Image model is fixed to gemini-3-pro-image-preview
+    st.caption("Image Model: gemini-3-pro-image-preview")
     
     st.markdown("---")
     st.subheader("Custom Examples")
@@ -224,7 +308,7 @@ with st.sidebar:
 
 
 MODEL = model_name
-IMAGE_MODEL = image_model_name
+THINKING_LEVEL = thinking_level
 
 # Chat input
 user_input = st.text_input('What are we "celebrating"?', key="input1")
@@ -241,7 +325,7 @@ if st.button("Generate"):
         message_placeholder = st.empty()
         
         # Get streaming response and prompt
-        stream_generator, achievement_prompt = stream_generate(query=user_input, model=MODEL)
+        stream_generator, achievement_prompt = stream_generate(query=user_input, model=MODEL, thinking_level=THINKING_LEVEL)
                 
         for chunk in stream_generator:
             if chunk:  # Only concatenate if chunk is not None
@@ -256,28 +340,41 @@ if st.button("Generate"):
     if full_response.strip():
         st.markdown("---")
         
-        image_setup_prompt = f"""Create a visual representation of the REWARD from this Dungeon Crawler Carl achievement. Focus primarily on the reward itself, using the achievement's dark humor, tone, and moral judgment to inform the visual style.
+        image_setup_prompt = f"""You are an expert prompt engineer for the Nano Banana Pro AI image model. Create a detailed structured prompt for an image of the REWARD from this Dungeon Crawler Carl achievement.
+        
+CRITICAL: The underlying image model handles text well. You can include specific labels or text on the items if appropriate.
 
-VISUAL REQUIREMENTS:
-- Primary subject: The specific reward box/item mentioned in the achievement
-- Style: Gaming reward aesthetic with inappropriate/darkly humorous elements  
-- Tone: Maintain the achievement's sarcastic judgment and absurdity in visual form
-- Irony: Beautiful, appealing reward presentation of morally questionable contents
-- DCC Aesthetic: Post-apocalyptic gaming style with corporate cheerfulness applied to dark themes
-- Thematic consistency: Visual elements should match the achievement's context and moral theme
+REFERENCE - IMAGE STYLE GUIDE (ICS Framework):
+- Subject: The specific reward box/item (e.g., "A beaten up cardboard box labeled 'Asshole'").
+- Style: Photorealistic, cinematic lighting, 8k resolution, detailed textures. Post-apocalyptic dungeon crawler aesthetic mixed with corporate gloss.
+- Lighting: Dramatic, high contrast, maybe neon accents or rim lighting suitable for a "loot drop".
+- Composition: Centered hero shot of the item, shallow depth of field.
 
-Achievement: {full_response}
+Achievement Context: {full_response}
 
-Generate a concise, specific image prompt focusing on the reward that captures its visual irony and DCC absurdity. Do not include children. Output only the image generation prompt:"""
+MANDATORY OUTPUT FORMAT:
+Provide *only* the final prompt text. The prompt should follow this structure:
+[Subject description], [Material/Texture details], [Lighting style], [Camera/Composition], [Style modifiers]
+
+Example output:
+A pristine white loot box with golden trim sitting on a dirty dungeon floor, labeled "Compensation" in elegant serif font, soft studio lighting from top right, 85mm lens, sharp focus, octane render, 8k.
+"""
 
         with st.status("Generating reward..."):
             st.write("Validating if crawler achieved the reward.")
+            # We use the text model to generate the prompt
             image_prompt = retry_gemini(image_setup_prompt, MODEL, generate_content_config)
+            
             st.write("Digging through the digital junk drawer of slightly used rewards... Found it!")
-            response_image = retry_imagen(image_prompt, IMAGE_MODEL)
-            st.write("Slapping a new label on it.")
-            st.image(response_image.generated_images[0].image.image_bytes, caption=["Generated by Imagen 4"])
-            st.write("Reward deployed.")
+            # Use the new image generation function
+            image_bytes = generate_image(image_prompt)
+            
+            if image_bytes:
+                st.write("Slapping a new label on it.")
+                st.image(image_bytes, caption=["Generated by Gemini 3 Pro Image Preview"])
+                st.write("Reward deployed.")
+            else:
+                st.error("Failed to generate reward image.")
     
     # Add debug info to sidebar
     with st.sidebar:
@@ -293,7 +390,7 @@ Generate a concise, specific image prompt focusing on the reward that captures i
             
             st.subheader("Models Used")
             st.write(f"**Text Model:** {MODEL}")
-            st.write(f"**Image Model:** {IMAGE_MODEL}")
+            st.write(f"**Image Model:** gemini-3-pro-image-preview")
 
  #   with st.spinner("Generating reward..."):
         
